@@ -9,7 +9,7 @@ from typing import Any
 import openpyxl
 import pytest
 
-from app.sources import access_catalog, cells, customers, distr
+from app.sources import access_catalog, cells, customers, distr, price_groups
 
 DISTR_VALUES: dict[str, object] = {
     "Артикул": "CA102150150",
@@ -268,3 +268,11 @@ def test_distr_reads_optional_columns(tmp_path: Path) -> None:
         replace(DISTR_ITEM, code_1c="ЕК000020771", price_group="Инструмент"),
         replace(DISTR_ITEM, article="TTH50"),
     )
+
+def test_price_groups(tmp_path: Path) -> None:
+    rows: list[Sequence[object]] = [
+        ["Ценовая группа"], ["Расходка"], ["Грузики  CLIPPER"], [None], ["Расходка"], ["РУБ"],
+    ]
+    loaded = price_groups.read_price_groups(write_xlsx(tmp_path / "groups.xlsx", rows))
+    assert loaded.items == ("РУБ", "Расходка", "Грузики CLIPPER")
+    assert loaded.problems == ()

@@ -7,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Final
 
+from app.domain.pricing import DEFAULT_GROUP
 from app.sources.cells import Loaded, Record, load, xlsx_rows
 
 COLUMNS: Final = (
@@ -34,7 +35,6 @@ COLUMNS: Final = (
 )
 # Появятся в выгрузке из 1С; пока их нет, код берётся из Access, группа — RUB.
 OPTIONAL_COLUMNS: Final = ("КодВ1С", "ЦеноваяГруппа")
-DEFAULT_PRICE_GROUP: Final = "РУБ"
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,5 +93,5 @@ def _item(row: Record) -> DistrItem:
         country=row.text("Страна производства [COUNTRY]"),
         certificate_url=row.text("Ссылка на сертификат [SSYLKA_NA_SERTIFIKAT]"),
         certificate_until=row.text("Срок действия сертификата [SROK_DEYSTVIYA_SERTIFIKATA]"),
-        price_group=row.text("ЦеноваяГруппа") or DEFAULT_PRICE_GROUP,
+        price_group=row.text("ЦеноваяГруппа") or DEFAULT_GROUP,
     )
