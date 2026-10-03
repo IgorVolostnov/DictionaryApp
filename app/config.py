@@ -1,0 +1,69 @@
+"""Все настройки приложения. Единственное место, где читается окружение."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+from functools import lru_cache
+from typing import Self
+
+from pydantic import Field, SecretStr, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+MIN_SECRET_LENGTH = 32
+
+
+class AppEnv(StrEnum):
+    DEV = "dev"
+    TEST = "test"
+    PROD = "prod"
+
+
+class AuthMode(StrEnum):
+    OIDC = "oidc"
+    DEV = "dev"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # По умолчанию prod: забытая настройка не должна ослаблять защиту.
+    app_env: AppEnv = AppEnv.PROD
+    auth_mode: AuthMode = AuthMode.OIDC
+
+    database_url: str
+    session_secret: SecretStr
+
+    oidc_issuer: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: SecretStr = SecretStr("")
+
+    yandex_vision_api_key: SecretStr = SecretStr("")
+    yandex_folder_id: str = ""
+
+    photo_base_url: str = "https://www.rossvik.moscow"
+    max_rows_per_request: int = Field(default=2000, ge=1, le=10_000)
+    stale_after_minutes: int = Field(default=120, ge=1)
+
+    @property
+    def ocr_enabled(self) -> bool:
+        return bool(self.yandex_vision_api_key.get_secret_value() and self.yandex_folder_id)
+
+    @model_validator(mode="after")
+    def _check_security(self) -> Self:
+        if len(self.session_secret.get_secret_value()) < MIN_SECRET_LENGTH:
+            raise ValueError("SESSION_SECRET должен быть не короче 32 символов")
+        if self.auth_mode is AuthMode.DEV:
+            if self.app_env is not AppEnv.DEV:
+                raise ValueError("AUTH_MODE=dev разрешён только при APP_ENV=dev")
+        elif not (
+            self.oidc_issuer and self.oidc_client_id and self.oidc_client_secret.get_secret_value()
+        ):
+            raise ValueError(
+                "Для AUTH_MODE=oidc нужны OIDC_ISSUER, OIDC_CLIENT_ID и OIDC_CLIENT_SECRET"
+            )
+        return self
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()

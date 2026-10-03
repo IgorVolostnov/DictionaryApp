@@ -1,0 +1,2 @@
+tests/unit/golden/*.txt -text
+app/domain/vba_strconv.txt -text
