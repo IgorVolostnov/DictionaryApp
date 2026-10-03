@@ -157,15 +157,22 @@ def test_key_without_apostrophes_is_stable(s: str) -> None:
     ("raw", "keys"),
     [
         ("Ключ 10×13", ("KLYUCH10?13", "KLYUCH10X13")),
-        ("Ключ 10х13", ("KLYUCH10X13",)),  # кириллическая х уже совпадает
         ("Шланг 1/2’", ("SHLANG12’", "SHLANG12")),
-        ("Труба ½", ("TPYBA?", "TPYBA12")),
-        ("«Хомут» — 5", ("«XOMYT»—5", "XOMYT5")),
+        ("Труба ½", ("TPYBA?", "TPYBA12", "TRUBA12")),
+        ("«Втулка» — 5", ("«BTYLKA»—5", "BTYLKA5", "VTULKA5")),
         ("Würth", ("WURTH",)),
+        # Ключи старого формата из словаря Access (товары 2004501, 2005401, 2005601).
+        ("головка в сборе", ("GOLOBKABCBOPE", "GOLOVKAVSBORE")),
+        ("Пружина поз. 111", ("PPYZHINAPOZ111", "PRUZHINAPOZ111")),
+        ("Соединительный", ("COEDINITEL'NYJ", "SOEDINITEL'NYJ")),
     ],
 )
 def test_lookup_keys(raw: str, keys: tuple[str, ...]) -> None:
     assert lookup_keys(raw) == keys
+
+
+def test_cyrillic_kha_matches_latin_x() -> None:
+    assert lookup_keys("Ключ 10х13")[0] == lookup_keys("Ключ 10x13")[0] == "KLYUCH10X13"
 
 
 def test_folds_are_single_chars_to_ascii() -> None:
@@ -181,7 +188,6 @@ def test_lost_chars() -> None:
 def test_first_lookup_key_is_stored_key(s: str) -> None:
     keys = lookup_keys(s)
     assert keys[0] == normalize_key(s)
-    assert len(keys) in (1, 2)
-    if not set(s) & LOOKUP_FOLDS.keys():
+    assert len(set(keys)) == len(keys) <= 3
+    if not set(s) & (LOOKUP_FOLDS.keys() | set(LOOKALIKE_RUS)):
         assert keys == (normalize_key(s),)
-

@@ -47,6 +47,12 @@ _TRANSLIT_TABLE: Final = str.maketrans(
     dict(zip(TRANSLIT_RUS, TRANSLIT_LAT, strict=True))
     | {rus.upper(): lat.upper() for rus, lat in zip(TRANSLIT_RUS, TRANSLIT_LAT, strict=True)}
 )
+# Третий ключ: старые ключи словаря сделаны транслитом без ЗаменаРуссвихБукв
+# («головка в сборе» → GOLOVKAVSBORE, а Преобразование даёт GOLOBKABCBOPE).
+# Буквы-двойники заранее заменяются по таблице транслита, остальное делает vba_transform.
+_PLAIN_TABLE: Final[dict[int, str]] = {
+    ord(ch): _TRANSLIT_TABLE[ord(ch)] for ch in LOOKALIKE_RUS if ord(ch) in _TRANSLIT_TABLE
+}
 # Невидимые символы, которые VBA не удалял: неразрывный пробел, табуляция,
 # переводы строк, символы нулевой ширины, мягкий перенос, BOM.
 _INVISIBLE: Final = frozenset({"Cc", "Cf", "Zs", "Zl", "Zp"})
@@ -136,14 +142,16 @@ def normalize_key(s: str) -> str:
 
 
 def lookup_keys(s: str) -> tuple[str, ...]:
-    """Ключи для поиска: сохраняемый VBA-ключ и, если отличается, ключ после LOOKUP_FOLDS.
+    """Ключи поиска без повторов: VBA-ключ, после LOOKUP_FOLDS и старого формата.
 
-    Если ключи найдут разные товары, строка помечается как неоднозначная.
+    Сохраняемый ключ всегда первый. Если ключи найдут разные товары,
+    строка помечается как неоднозначная.
     """
     clean = strip_invisible(s)
-    exact = vba_transform(clean)
-    folded = vba_transform(clean.translate(_FOLD_TABLE))
-    return (exact,) if folded == exact else (exact, folded)
+    folded = clean.translate(_FOLD_TABLE)
+    plain = folded.translate(_PLAIN_TABLE)
+    return tuple(dict.fromkeys(vba_transform(text) for text in (clean, folded, plain)))
+
 
 
 def lost_chars(s: str) -> str:
