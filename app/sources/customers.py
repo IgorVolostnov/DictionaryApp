@@ -57,17 +57,20 @@ def split_fields(line: str) -> list[str]:
     """Поля строки.
 
     Поля 1С разделяет «;» без пробела, а адреса в списке e-mail — «; » с пробелом.
-    Кусок, который начинается с пробела, — продолжение списка адресов, но только если
-    в предыдущем поле уже есть адрес. Иначе это новое поле: в 1С e-mail бывает записан
-    с пробелом в начале («Ушаков; exalex@bk.ru ;Дилерская;...»).
+    Кусок, который начинается с пробела, — продолжение предыдущего поля
+    («Фирма; Лютик», «a@b.ru; c@d.ru»). Исключение: в куске есть адрес, а в предыдущем
+    поле адреса нет. Тогда это e-mail, записанный в 1С с пробелом в начале
+    («Ушаков; exalex@bk.ru ;Дилерская;...»).
     """
     fields: list[str] = []
     for piece in line.split(";"):
-        if fields and piece.startswith(" ") and "@" in fields[-1]:
+        starts_email = "@" in piece and "@" not in (fields[-1] if fields else "")
+        if fields and piece.startswith(" ") and not starts_email:
             fields[-1] += ";" + piece
         else:
             fields.append(piece)
     return fields
+
 
 
 
