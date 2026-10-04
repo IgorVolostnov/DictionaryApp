@@ -57,15 +57,18 @@ def split_fields(line: str) -> list[str]:
     """Поля строки.
 
     Поля 1С разделяет «;» без пробела, а адреса в списке e-mail — «; » с пробелом.
-    Поэтому кусок, который начинается с пробела, считается продолжением предыдущего поля.
+    Кусок, который начинается с пробела, — продолжение списка адресов, но только если
+    в предыдущем поле уже есть адрес. Иначе это новое поле: в 1С e-mail бывает записан
+    с пробелом в начале («Ушаков; exalex@bk.ru ;Дилерская;...»).
     """
     fields: list[str] = []
     for piece in line.split(";"):
-        if fields and piece.startswith(" "):
+        if fields and piece.startswith(" ") and "@" in fields[-1]:
             fields[-1] += ";" + piece
         else:
             fields.append(piece)
     return fields
+
 
 
 def customer_key(name: str, emails: Iterable[str]) -> tuple[str, frozenset[str]]:

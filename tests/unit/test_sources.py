@@ -10,6 +10,7 @@ import openpyxl
 import pytest
 
 from app.sources import access_catalog, cells, customers, distr, price_groups
+from app.sources.customers import split_fields
 
 DISTR_VALUES: dict[str, object] = {
     "Артикул": "CA102150150",
@@ -276,3 +277,18 @@ def test_price_groups(tmp_path: Path) -> None:
     loaded = price_groups.read_price_groups(write_xlsx(tmp_path / "groups.xlsx", rows))
     assert loaded.items == ("РУБ", "Расходка", "Грузики CLIPPER")
     assert loaded.problems == ()
+
+
+def test_split_fields_email_with_leading_space() -> None:
+    line = "Ушаков; a@b.ru ; c@d.ru;Дилерская;0;0;;;end;"
+    assert split_fields(line) == [
+        "Ушаков",
+        " a@b.ru ; c@d.ru",
+        "Дилерская",
+        "0",
+        "0",
+        "",
+        "",
+        "end",
+        "",
+    ]
