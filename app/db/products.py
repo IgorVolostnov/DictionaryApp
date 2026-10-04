@@ -17,7 +17,8 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Product, SourceImport
+from app.db.imports import ImportRejectedError, log_import
+from app.db.models import Product
 from app.db.prices import load_price_settings
 from app.sources.distr import DistrItem
 
@@ -27,10 +28,6 @@ _UPDATED: Final = (
     *(field.name for field in dataclasses.fields(DistrItem) if field.name != "article"),
     "active",
 )
-
-
-class ImportRejectedError(ValueError):
-    """Выгрузка не загружена, данные в базе не изменились."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,17 +68,15 @@ async def import_distr(
         duplicates=tuple(article for article, n in counts.items() if n > 1),
         unknown_groups=tuple(sorted({i.price_group for i in unique.values()} - known)),
     )
-    session.add(
-        SourceImport(
-            source=DISTR,
-            file_name=file_name,
-            author=author,
-            total=result.total,
-            added=result.added,
-            deactivated=result.deactivated,
-        )
+    await log_import(
+        session,
+        source=DISTR,
+        file_name=file_name,
+        author=author,
+        total=result.total,
+        added=result.added,
+        deactivated=result.deactivated,
     )
-    await session.flush()
     return result
 
 

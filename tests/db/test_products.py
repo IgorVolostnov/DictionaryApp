@@ -8,9 +8,10 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.imports import ImportRejectedError
 from app.db.models import Product, SourceImport
 from app.db.prices import save_price_groups
-from app.db.products import DistrImport, ImportRejectedError, import_distr
+from app.db.products import DistrImport, import_distr
 from app.domain.pricing import DEFAULT_GROUP
 from app.sources.distr import DistrItem
 

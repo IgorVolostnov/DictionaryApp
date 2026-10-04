@@ -91,3 +91,18 @@ class SourceImport(Base):
     added: Mapped[int] = mapped_column(Integer)
     deactivated: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Customer(Base):
+    """Покупатель из price_user.csv. Поля как в CustomerRow; таблица заменяется каждой выгрузкой."""
+
+    __tablename__ = "customer"
+
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    emails: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    price_type: Mapped[str] = mapped_column(Text)
+    credit_limit: Mapped[Decimal | None] = mapped_column(Numeric)
+    deferral_days: Mapped[int | None] = mapped_column(Integer)
+    debt: Mapped[Decimal | None] = mapped_column(Numeric)
+    group_emails: Mapped[list[str]] = mapped_column(ARRAY(Text))
