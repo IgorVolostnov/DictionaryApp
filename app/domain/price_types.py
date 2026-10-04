@@ -44,9 +44,7 @@ def parse_price_types(text: str, groups: Collection[str]) -> dict[str, PriceType
             "не найдено ни одного вида цены вида «1. Все_5: [Розничные] * 0.95»"
         )
     types = {name: PriceType(name, rule, extra[name]) for name, rule in main.items()}
-    for column in BaseColumn:
-        types.setdefault(column.value, PriceType(column.value, PriceRule(column)))
-    return types
+    return base_price_types() | types
 
 
 def _read_line(
@@ -75,3 +73,7 @@ def _read_line(
         raise InvalidPriceRuleError(f"ценовая группа «{group}» указана дважды")
     extra[current][group] = parse_formula(bracket + rest).rule
     return current
+
+def base_price_types() -> dict[str, PriceType]:
+    """Базовые виды цен: цена из выгрузки как есть, без исключений по группам."""
+    return {c.value: PriceType(c.value, PriceRule(c)) for c in BaseColumn}

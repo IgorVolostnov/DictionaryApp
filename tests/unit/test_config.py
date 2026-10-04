@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.config import AppEnv, AuthMode, Settings, get_settings
+from app.config import AppEnv, AuthMode, DatabaseSettings, Settings, get_settings
 
 BASE: dict[str, Any] = {
     "database_url": "postgresql+psycopg://app:pw@127.0.0.1/dictionary",
@@ -74,3 +74,15 @@ def test_get_settings_reads_environment(monkeypatch: pytest.MonkeyPatch, tmp_pat
         assert get_settings().app_env is AppEnv.DEV
     finally:
         get_settings.cache_clear()
+
+
+def test_database_settings_need_only_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    for name in ("OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "SESSION_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("AUTH_MODE", "oidc")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/db")
+    assert DatabaseSettings().database_url == "postgresql+psycopg://u:p@localhost/db"
+

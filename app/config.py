@@ -23,14 +23,19 @@ class AuthMode(StrEnum):
     DEV = "dev"
 
 
-class Settings(BaseSettings):
+class DatabaseSettings(BaseSettings):
+    """Только адрес базы: для миграций и инструментов, которым не нужен вход."""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    database_url: str
+
+
+class Settings(DatabaseSettings):
     # По умолчанию prod: забытая настройка не должна ослаблять защиту.
     app_env: AppEnv = AppEnv.PROD
     auth_mode: AuthMode = AuthMode.OIDC
 
-    database_url: str
     session_secret: SecretStr
 
     oidc_issuer: str = ""
