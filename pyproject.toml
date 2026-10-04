@@ -50,6 +50,7 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
+filterwarnings = ["error"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra --strict-markers --cov --cov-report=term-missing"
