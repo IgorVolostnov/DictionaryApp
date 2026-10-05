@@ -191,3 +191,23 @@ def test_first_lookup_key_is_stored_key(s: str) -> None:
     assert len(set(keys)) == len(keys) <= 3
     if not set(s) & (LOOKUP_FOLDS.keys() | set(LOOKALIKE_RUS)):
         assert keys == (normalize_key(s),)
+
+
+def test_degree_sign_kept_in_stored_key() -> None:
+    # Совместимость с VBA: сохраняемый ключ не меняется.
+    assert normalize_key("TR-570C-27°") == "TR570C27°"
+
+
+def test_degree_sign_folded_in_lookup_keys() -> None:
+    keys = lookup_keys("TR-570C-27°")
+    assert keys[0] == "TR570C27°"
+    assert normalize_key("TR-570C-27") in keys
+
+
+def test_degree_fold_keeps_angles_apart() -> None:
+    assert not set(lookup_keys("TR-570C-27°")) & set(lookup_keys("TR-570C-90°"))
+
+
+def test_multiplication_sign_matches_latin_x() -> None:
+    assert normalize_key("230×120") == "230?120"
+    assert normalize_key("230x120") in lookup_keys("230×120")

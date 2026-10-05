@@ -82,6 +82,7 @@ LOOKUP_FOLDS: Final[dict[str, str]] = {
     "\u2014": "-",  # длинное тире
     "\u2212": "-",  # минус
     "\u2026": "...",  # многоточие
+    "\u00b0": "",  # знак градуса: «TR-570C-27°» ищется и как «TR-570C-27»
 }
 _FOLD_TABLE: Final = str.maketrans(LOOKUP_FOLDS)
 

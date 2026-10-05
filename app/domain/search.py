@@ -79,35 +79,34 @@ class SearchIndex:
     def _add(self, key: str, product_id: int, via: Via) -> None:
         self._found.setdefault(key, {}).setdefault(product_id, set()).add(via)
 
+    def _candidates(self, found: dict[int, set[Via]]) -> tuple[Candidate, ...]:
+        candidates = (
+            Candidate(self._items[i], tuple(v for v in Via if v in via)) for i, via in found.items()
+        )
+        return tuple(sorted(candidates, key=lambda c: site_order(c.item)))
+
     def find(self, text: str) -> LineMatch:
         found: dict[int, set[Via]] = {}
         for key in lookup_keys(text):
             for product_id, via in self._found.get(key, {}).items():
                 found.setdefault(product_id, set()).update(via)
-        candidates = sorted(
-            (
-                Candidate(self._items[i], tuple(v for v in Via if v in via))
-                for i, via in found.items()
-            ),
-            key=lambda candidate: site_order(candidate.item),
-        )
+        candidates = self._candidates(found)
         active = tuple(c for c in candidates if c.item.active)
         if len(active) == 1:
             return LineMatch(text, Status.FOUND, active)
         if active:
             return LineMatch(text, Status.AMBIGUOUS, active)
         if candidates:
-            return LineMatch(text, Status.INACTIVE, tuple(candidates))
+            return LineMatch(text, Status.INACTIVE, candidates)
         return LineMatch(text, Status.NOT_FOUND, ())
 
-    def shared_keys(self) -> dict[str, tuple[str, ...]]:
+    def shared_keys(self) -> dict[str, tuple[Candidate, ...]]:
         """Ключи, ведущие к нескольким активным товарам: такие строки всегда неоднозначны."""
-        result: dict[str, tuple[str, ...]] = {}
+        result: dict[str, tuple[Candidate, ...]] = {}
         for key in sorted(self._found):
-            items = (self._items[i] for i in self._found[key])
-            articles = sorted(item.article for item in items if item.active)
-            if len(articles) > 1:
-                result[key] = tuple(articles)
+            active = tuple(c for c in self._candidates(self._found[key]) if c.item.active)
+            if len(active) > 1:
+                result[key] = active
         return result
 
 

@@ -92,4 +92,5 @@ def test_site_order() -> None:
 
 
 def test_shared_keys() -> None:
-    assert INDEX.shared_keys() == {"SHARED": ("CA102150150", "P07", "TR-415.EPDM.100")}
+    expected = tuple(Candidate(i, (Via.ALIAS,)) for i in (A2, A4, A1))
+    assert INDEX.shared_keys() == {"SHARED": expected}
