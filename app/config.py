@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 from typing import Self
 
 from pydantic import Field, SecretStr, model_validator
@@ -29,6 +30,18 @@ class DatabaseSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str
+
+
+class SourceSettings(DatabaseSettings):
+    """Выгрузки 1С для импорта по таймеру. На разработке — копии в input/."""
+
+    distr_path: Path = Path("input/distr.xlsx")
+    customers_path: Path = Path("input/price_user.csv")
+    snapshot_dir: Path = Path("output/snapshots")
+    # Файл, изменённый позже, возможно, ещё пишется 1С: его загрузит следующий запуск.
+    quiet_seconds: int = Field(default=120, ge=0)
+    # Сколько процентов активных товаров или покупателей может пропасть за одну загрузку.
+    max_drop_percent: int = Field(default=20, ge=0, le=100)
 
 
 class Settings(DatabaseSettings):

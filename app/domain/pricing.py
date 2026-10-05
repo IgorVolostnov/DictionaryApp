@@ -17,7 +17,7 @@ MAX_DECIMALS: Final = 4
 
 
 class BaseColumn(StrEnum):
-    DISTR = "Дистрибьюторская"  # distr.xlsx: «Цена»
+    DISTR = "Дистрибьюторская"  # distr.xlsx: «Цена Дистрибьюторская»
     DEALER = "Дилерская"  # distr.xlsx: «Цена Дилерская»
     RETAIL = "Розничные"  # distr.xlsx: «Цена Розничная»
 

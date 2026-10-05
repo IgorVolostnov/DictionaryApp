@@ -21,7 +21,7 @@ from sqlalchemy import bindparam, select, update
 from sqlalchemy.dialects.postgresql import Insert, insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
-from app.db.imports import ImportRejectedError, log_import
+from app.db.imports import FileStamp, ImportRejectedError, log_import
 from app.db.models import Product
 from app.db.prices import load_price_settings
 from app.domain.pricing import DEFAULT_GROUP
@@ -78,7 +78,12 @@ class _Renames:
 
 
 async def import_distr(
-    session: AsyncSession, items: Sequence[DistrItem], author: str, file_name: str
+    session: AsyncSession,
+    items: Sequence[DistrItem],
+    author: str,
+    file_name: str,
+    *,
+    stamp: FileStamp | None = None,
 ) -> DistrImport:
     if not items:
         raise ImportRejectedError("в файле нет ни одного товара, каталог не изменён")
@@ -126,6 +131,7 @@ async def import_distr(
         total=result.total,
         added=result.added,
         deactivated=result.deactivated,
+        stamp=stamp,
     )
     return result
 

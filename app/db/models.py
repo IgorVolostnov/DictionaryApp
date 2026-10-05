@@ -108,7 +108,11 @@ class Alias(Base):
 
 
 class SourceImport(Base):
-    """Журнал загрузок выгрузок: какой файл, кто, когда, сколько строк."""
+    """Журнал загрузок выгрузок: какой файл, кто, когда, сколько строк.
+
+    sha256 и source_mtime — отпечаток файла при загрузке по таймеру (app/db/sync.py):
+    по ним неизменившаяся выгрузка не загружается повторно. У загрузок из tools/ пусто.
+    """
 
     __tablename__ = "source_import"
 
@@ -120,6 +124,8 @@ class SourceImport(Base):
     added: Mapped[int] = mapped_column(Integer)
     deactivated: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    sha256: Mapped[str | None] = mapped_column(Text)
+    source_mtime: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Customer(Base):

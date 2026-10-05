@@ -1,0 +1,14 @@
+[Unit]
+Description=dictionary-app: импорт выгрузок 1С (distr.xlsx, price_users.csv)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=dictionary
+Group=dictionary
+WorkingDirectory=/opt/dictionary-app
+StateDirectory=dictionary-app
+ExecStart=/opt/dictionary-app/.venv/bin/python -m tools.sync_sources
+TimeoutStartSec=15min
+Nice=10

@@ -15,7 +15,7 @@ from typing import Any, Final
 from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.imports import ImportRejectedError, log_import
+from app.db.imports import FileStamp, ImportRejectedError, log_import
 from app.db.models import Customer
 from app.db.prices import load_price_settings
 from app.sources.customers import CustomerRow, customer_key, find_duplicates
@@ -33,7 +33,12 @@ class CustomersImport:
 
 
 async def import_customers(
-    session: AsyncSession, rows: Sequence[CustomerRow], author: str, file_name: str
+    session: AsyncSession,
+    rows: Sequence[CustomerRow],
+    author: str,
+    file_name: str,
+    *,
+    stamp: FileStamp | None = None,
 ) -> CustomersImport:
     if not rows:
         raise ImportRejectedError("в файле нет ни одного покупателя, список не изменён")
@@ -60,6 +65,7 @@ async def import_customers(
         total=result.total,
         added=result.added,
         deactivated=result.removed,
+        stamp=stamp,
     )
     return result
 

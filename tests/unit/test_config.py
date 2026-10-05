@@ -6,7 +6,14 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.config import AppEnv, AuthMode, DatabaseSettings, Settings, get_settings
+from app.config import (
+    AppEnv,
+    AuthMode,
+    DatabaseSettings,
+    Settings,
+    SourceSettings,
+    get_settings,
+)
 
 BASE: dict[str, Any] = {
     "database_url": "postgresql+psycopg://app:pw@127.0.0.1/dictionary",
@@ -83,3 +90,19 @@ def test_database_settings_need_only_url(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.setenv("AUTH_MODE", "oidc")
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/db")
     assert DatabaseSettings().database_url == "postgresql+psycopg://u:p@localhost/db"
+
+
+def test_source_settings_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+    for name in (
+        "DISTR_PATH",
+        "CUSTOMERS_PATH",
+        "SNAPSHOT_DIR",
+        "QUIET_SECONDS",
+        "MAX_DROP_PERCENT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/db")
+    settings = SourceSettings()
+    assert settings.distr_path == Path("input/distr.xlsx")
+    assert (settings.quiet_seconds, settings.max_drop_percent) == (120, 20)
