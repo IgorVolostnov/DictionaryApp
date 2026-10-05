@@ -54,9 +54,7 @@ async def save_price_groups(
     return names
 
 
-async def save_price_types(
-    session: AsyncSession, text: str, author: str
-) -> dict[str, PriceType]:
+async def save_price_types(session: AsyncSession, text: str, author: str) -> dict[str, PriceType]:
     """Новое описание видов цен. С ошибкой не сохраняется."""
     types = parse_price_types(text, await _groups(session))
     await _add(session, TYPES, text, author)

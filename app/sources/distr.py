@@ -7,9 +7,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Final
 
-from app.domain.pricing import DEFAULT_GROUP
 from app.sources.cells import Loaded, Record, load, xlsx_rows
 
+# «Код в 1С» обязателен: по нему import_distr узнаёт переименованные товары, а словарь
+# из Access находит товары. Старый файл без этой колонки не загрузится.
 COLUMNS: Final = (
     "Артикул",
     "Наименование",
@@ -32,9 +33,13 @@ COLUMNS: Final = (
     "Страна производства [COUNTRY]",
     "Ссылка на сертификат [SSYLKA_NA_SERTIFIKAT]",
     "Срок действия сертификата [SROK_DEYSTVIYA_SERTIFIKATA]",
+    "Код в 1С",
+    "Сортировка на сайте",
+    "URL страницы",
 )
-# Появятся в выгрузке из 1С; пока их нет, код берётся из Access, группа — RUB.
-OPTIONAL_COLUMNS: Final = ("КодВ1С", "ЦеноваяГруппа")
+# Появится в выгрузке из 1С. Пока её нет: группу ставит справочник номенклатуры
+# (tools/load_groups), загрузка distr её не меняет.
+OPTIONAL_COLUMNS: Final = ("ЦеноваяГруппа",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,18 +66,29 @@ class DistrItem:
     country: str | None
     certificate_url: str | None
     certificate_until: str | None
-    price_group: str
+    price_group: str | None  # None — колонки нет, группа товара в базе не меняется
+    sort_order: int | None = None  # «Сортировка на сайте»: порядок строк в результате подбора
+    page_url: str | None = None  # карточка товара на сайте
 
 
 def read_distr(path: Path) -> Loaded[DistrItem]:
     return load(xlsx_rows(path), COLUMNS, _item, OPTIONAL_COLUMNS)
 
 
+def _integer(row: Record, column: str) -> int | None:
+    number = row.number(column)
+    if number is None:
+        return None
+    if number != number.to_integral_value():
+        raise ValueError(f"«{column}»: {number} — нужно целое число")
+    return int(number)
+
+
 def _item(row: Record) -> DistrItem:
     photos = row.text("Дополнительные фото") or ""
     return DistrItem(
         article=row.required("Артикул"),
-        code_1c=row.text("КодВ1С"),
+        code_1c=row.text("Код в 1С"),
         name=row.required("Наименование"),
         barcode=row.text("ШтрихКод"),
         quantity=row.number("Количество"),
@@ -93,5 +109,7 @@ def _item(row: Record) -> DistrItem:
         country=row.text("Страна производства [COUNTRY]"),
         certificate_url=row.text("Ссылка на сертификат [SSYLKA_NA_SERTIFIKAT]"),
         certificate_until=row.text("Срок действия сертификата [SROK_DEYSTVIYA_SERTIFIKATA]"),
-        price_group=row.text("ЦеноваяГруппа") or DEFAULT_GROUP,
+        price_group=row.text("ЦеноваяГруппа"),
+        sort_order=_integer(row, "Сортировка на сайте"),
+        page_url=row.text("URL страницы"),
     )

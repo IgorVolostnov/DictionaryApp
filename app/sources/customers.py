@@ -72,8 +72,6 @@ def split_fields(line: str) -> list[str]:
     return fields
 
 
-
-
 def customer_key(name: str, emails: Iterable[str]) -> tuple[str, frozenset[str]]:
     """Наименование без учёта регистра и лишних пробелов плюс набор e-mail."""
     return " ".join(name.split()).casefold(), frozenset(emails)
@@ -85,7 +83,6 @@ def find_duplicates(rows: Iterable[CustomerRow]) -> list[tuple[CustomerRow, ...]
     for row in rows:
         groups[customer_key(row.name, row.emails)].append(row)
     return [tuple(group) for group in groups.values() if len(group) > 1]
-
 
 
 def _customer(row: Record) -> CustomerRow:

@@ -9,11 +9,13 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Identity,
     Integer,
     MetaData,
     Numeric,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -47,13 +49,17 @@ class PriceDocument(Base):
 
 
 class Product(Base):
-    """Товар из distr.xlsx. Поля как в DistrItem; active — товар есть в последней выгрузке."""
+    """Товар из distr.xlsx. Поля как в DistrItem; active — товар есть в последней выгрузке.
+
+    code_1c уникален (пустых может быть сколько угодно): по нему import_distr узнаёт
+    товар, у которого сменился артикул.
+    """
 
     __tablename__ = "product"
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     article: Mapped[str] = mapped_column(Text, unique=True)
-    code_1c: Mapped[str | None] = mapped_column(Text)
+    code_1c: Mapped[str | None] = mapped_column(Text, unique=True)
     name: Mapped[str] = mapped_column(Text)
     barcode: Mapped[str | None] = mapped_column(Text)
     quantity: Mapped[Decimal | None] = mapped_column(Numeric)
@@ -75,7 +81,30 @@ class Product(Base):
     certificate_url: Mapped[str | None] = mapped_column(Text)
     certificate_until: Mapped[str | None] = mapped_column(Text)
     price_group: Mapped[str] = mapped_column(Text)
+    sort_order: Mapped[int | None] = mapped_column(Integer)
+    page_url: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean)
+
+
+class Alias(Base):
+    """Синоним: ключ (результат Преобразование) → товар.
+
+    source: access — перенесён из Access (tools/load_aliases), manager — добавлен в админке.
+    Уникальный индекс (key, product_id) служит и для поиска по ключу.
+    """
+
+    __tablename__ = "alias"
+    __table_args__ = (
+        CheckConstraint("source IN ('access', 'manager')", name="source"),
+        UniqueConstraint("key", "product_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True)
+    key: Mapped[str] = mapped_column(Text)
+    product_id: Mapped[int] = mapped_column(ForeignKey("product.id"), index=True)
+    source: Mapped[str] = mapped_column(Text)
+    author: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SourceImport(Base):

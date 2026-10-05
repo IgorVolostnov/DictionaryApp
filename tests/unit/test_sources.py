@@ -9,9 +9,11 @@ from typing import Any
 import openpyxl
 import pytest
 
-from app.sources import access_catalog, cells, customers, distr, price_groups
+from app.domain.pricing import DEFAULT_GROUP
+from app.sources import access_catalog, cells, customers, distr, nomenclature, price_groups
 from app.sources.customers import split_fields
 
+PAGE_URL = "https://www.rossvik.moscow/catalog/tovar/ca102150150/"
 DISTR_VALUES: dict[str, object] = {
     "Артикул": "CA102150150",
     "Наименование": "(CA102150150) Насадка на выхлопную трубу 102мм",
@@ -34,10 +36,13 @@ DISTR_VALUES: dict[str, object] = {
     "Страна производства [COUNTRY]": "КИТАЙ",
     "Ссылка на сертификат [SSYLKA_NA_SERTIFIKAT]": None,
     "Срок действия сертификата [SROK_DEYSTVIYA_SERTIFIKATA]": "None",
+    "Код в 1С": "ЕК000020771",
+    "Сортировка на сайте": 500,
+    "URL страницы": PAGE_URL,
 }
 DISTR_ITEM = distr.DistrItem(
     article="CA102150150",
-    code_1c=None,
+    code_1c="ЕК000020771",
     name="(CA102150150) Насадка на выхлопную трубу 102мм",
     barcode="4655753254703",
     quantity=Decimal(1),
@@ -58,7 +63,9 @@ DISTR_ITEM = distr.DistrItem(
     country="КИТАЙ",
     certificate_url=None,
     certificate_until=None,
-    price_group="РУБ",
+    price_group=None,
+    sort_order=500,
+    page_url=PAGE_URL,
 )
 # Как в настоящем distr.xlsx: в заголовке «Бренд» латинская e (\u0065).
 DISTR_HEADER = [name.replace("Бренд", "Бр\u0065нд") for name in distr.COLUMNS]
@@ -151,19 +158,35 @@ def test_distr_reads_items_and_problems(tmp_path: Path) -> None:
         distr_row(),
         distr_row({"Артикул": None}),
         distr_row({"Вес (грамм)": "1,9 кг"}),
+        distr_row({"Сортировка на сайте": "10.5"}),
     ]
     loaded = distr.read_distr(write_xlsx(tmp_path / "distr.xlsx", rows))
     assert loaded.items == (DISTR_ITEM,)
     assert loaded.problems == (
         "строка 3: пустая колонка «Артикул»",
         "строка 4: «Вес (грамм)»: «1,9 кг»: ожидалось число",
+        "строка 5: «Сортировка на сайте»: 10.5 — нужно целое число",
     )
 
 
 def test_distr_requires_all_columns(tmp_path: Path) -> None:
     path = write_xlsx(tmp_path / "distr.xlsx", [DISTR_HEADER[:-1]])
-    with pytest.raises(cells.SourceFormatError, match="SROK_DEYSTVIYA"):
+    with pytest.raises(cells.SourceFormatError, match="URL страницы"):
         distr.read_distr(path)
+
+
+def test_distr_price_group_and_empty_site_fields(tmp_path: Path) -> None:
+    empty = {"Код в 1С": None, "Сортировка на сайте": None, "URL страницы": None}
+    rows: list[Sequence[object]] = [
+        [*DISTR_HEADER, "ЦеноваяГруппа"],
+        [*distr_row(), "Инструмент"],
+        [*distr_row({"Артикул": "TTH50", **empty}), None],
+    ]
+    loaded = distr.read_distr(write_xlsx(tmp_path / "distr.xlsx", rows))
+    assert loaded.items == (
+        replace(DISTR_ITEM, price_group="Инструмент"),
+        replace(DISTR_ITEM, article="TTH50", code_1c=None, sort_order=None, page_url=None),
+    )
 
 
 def test_price_users(tmp_path: Path) -> None:
@@ -217,7 +240,6 @@ def test_find_duplicates() -> None:
     assert customers.find_duplicates([a, b, c, d]) == [(a, b)]
 
 
-
 def test_price_users_requires_utf8(tmp_path: Path) -> None:
     path = tmp_path / "price_user.csv"
     path.write_bytes(";".join(customers.COLUMNS).encode("cp1251"))
@@ -258,22 +280,10 @@ def test_access_catalog(tmp_path: Path) -> None:
     assert loaded.problems == ("строка 4: пустые «КодВ1С» и «Артикул»",)
 
 
-def test_distr_reads_optional_columns(tmp_path: Path) -> None:
-    rows: list[Sequence[object]] = [
-        [*DISTR_HEADER, "Код в 1С", "ЦеноваяГруппа"],
-        [*distr_row(), "ЕК000020771", "Инструмент"],
-        [*distr_row({"Артикул": "TTH50"}), None, None],
-    ]
-    loaded = distr.read_distr(write_xlsx(tmp_path / "distr.xlsx", rows))
-    assert loaded.items == (
-        replace(DISTR_ITEM, code_1c="ЕК000020771", price_group="Инструмент"),
-        replace(DISTR_ITEM, article="TTH50"),
-    )
-
 def test_price_groups(tmp_path: Path) -> None:
     rows: list[Sequence[object]] = [
         ["Ценовая группа"], ["Расходка"], ["Грузики  CLIPPER"], [None], ["Расходка"], ["РУБ"],
-    ]
+    ]  # fmt: skip
     loaded = price_groups.read_price_groups(write_xlsx(tmp_path / "groups.xlsx", rows))
     assert loaded.items == ("РУБ", "Расходка", "Грузики CLIPPER")
     assert loaded.problems == ()
@@ -292,3 +302,22 @@ def test_split_fields_email_with_leading_space() -> None:
         "end",
         "",
     ]
+
+
+def test_nomenclature(tmp_path: Path) -> None:
+    path = tmp_path / "Номенклатура.xlsx"
+    book: Any = openpyxl.Workbook()
+    for row in (
+        ("Артикул", "Код", "ЦеноваяГруппа"),
+        ("A1", "001", "  Грузики   CLIPPER "),
+        ("A2", "002", None),
+        (None, "003", "Расходка"),
+    ):
+        book.active.append(row)
+    book.save(path)
+    loaded = nomenclature.read_nomenclature(path)
+    assert loaded.items == (
+        nomenclature.NomenclatureRow("A1", "Грузики CLIPPER"),
+        nomenclature.NomenclatureRow("A2", DEFAULT_GROUP),
+    )
+    assert loaded.problems == ("строка 4: пустая колонка «Артикул»",)

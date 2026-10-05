@@ -89,8 +89,10 @@ def customers(rows: Sequence[CustomerRow]) -> set[str]:
             owners[email].add(row.name)
     say(f"e-mail у нескольких разных покупателей: {sum(len(n) > 1 for n in owners.values())}")
     with_email = sum(bool(r.emails) for r in rows)
-    say(f"e-mail заполнен: {with_email} из {len(rows)}, несколько адресов: "
-        f"{sum(len(r.emails) > 1 for r in rows)}")
+    say(
+        f"e-mail заполнен: {with_email} из {len(rows)}, несколько адресов: "
+        f"{sum(len(r.emails) > 1 for r in rows)}"
+    )
     groups = Counter(r.group_emails for r in rows if r.group_emails)
     say(f"групп по emailОсновногоКонтрагента: {len(groups)}")
     say(f"    без группы: {sum(not r.group_emails for r in rows)}")
@@ -101,7 +103,6 @@ def customers(rows: Sequence[CustomerRow]) -> set[str]:
     types = Counter(r.price_type for r in rows)
     say(f"виды цен: {types.most_common()}")
     return set(types)
-
 
 
 def at(row: Sequence[object], i: int) -> object:

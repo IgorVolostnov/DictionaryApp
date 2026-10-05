@@ -106,7 +106,6 @@ _FORMULA: Final = re.compile(
 )
 
 
-
 def parse_formula(text: str) -> FormulaPart:
     """Старая формула из Access: «[Розничные] * 0.95», «Расходка: [Розничные]»."""
     match = _FORMULA.fullmatch(text)

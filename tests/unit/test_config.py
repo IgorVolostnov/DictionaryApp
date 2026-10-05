@@ -76,13 +76,10 @@ def test_get_settings_reads_environment(monkeypatch: pytest.MonkeyPatch, tmp_pat
         get_settings.cache_clear()
 
 
-def test_database_settings_need_only_url(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_database_settings_need_only_url(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
     for name in ("OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "SESSION_SECRET"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("AUTH_MODE", "oidc")
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/db")
     assert DatabaseSettings().database_url == "postgresql+psycopg://u:p@localhost/db"
-

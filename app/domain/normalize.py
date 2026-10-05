@@ -153,7 +153,6 @@ def lookup_keys(s: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(vba_transform(text) for text in (clean, folded, plain)))
 
 
-
 def lost_chars(s: str) -> str:
     """Символы, которые Регистр() заменит на «?» (без повторов), для админки."""
     lost = (ch for ch in strip_invisible(s) if ch != UNMAPPED and ch not in VBA_UPPER)

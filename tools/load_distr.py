@@ -29,7 +29,14 @@ async def main(path: Path) -> None:
         await engine.dispose()
     print(f"товаров: {result.total}, новых: {result.added}, снято: {result.deactivated}")
     print("повторы артикулов:", result.duplicates)
+    print("повторы кодов 1С (код оставлен у первого товара):", result.duplicate_codes)
     print("ценовые группы не из справочника:", result.unknown_groups)
+    print("переименовано по коду 1С:", len(result.renamed))
+    for old, new in result.renamed:
+        print(f"   {old} → {new}")
+    print("конфликты переименования:", len(result.rename_conflicts))
+    for code, old, new in result.rename_conflicts:
+        print(f"   {code}: был у {old}, в файле у {new} (занят); синонимы остались у {old}")
 
 
 if __name__ == "__main__":
