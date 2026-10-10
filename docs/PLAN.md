@@ -64,20 +64,28 @@
     (read -rsp … P; printf … | sudo tee …; проверка smbclient -A).
   - Таймеры (копии из deploy/ в /etc/systemd/system):
     dictionary-sync — обмены с 1С каждые 5 минут;
-    dictionary-backup — pg_dump -Fc в /var/lib/dictionary-app/backups в 01:30, хранится 14 дней.
+    dictionary-backup — pg_dump -Fc в /var/lib/dictionary-app/backups около 01:30
+    (+ до 10 мин случайно), хранится 14 дней.
     Загрузки: journalctl -u dictionary-sync -g 'загружен|отклонён|недоступен' --since today
     Копии:    journalctl -u dictionary-backup -n 5
+    Таймеры:  systemctl list-timers 'dictionary-*'
 
 ## Обновление сервера (после git push с ноутбука)
     cd /opt/dictionary-app
     sudo -u dictionary git pull --ff-only
     sudo -u dictionary uv sync --frozen --no-dev
-    sudo -u dictionary .venv/bin/alembic upgrade head      # перед этим — резервная копия
+    sudo systemctl start dictionary-backup.service          # копия перед миграциями
+    sudo -u dictionary .venv/bin/alembic upgrade head
     sudo install -m 644 -o root -g root deploy/*.service deploy/*.timer /etc/systemd/system/
     sudo systemctl daemon-reload
 
 Перенос базы ноутбук → сервер: pg_dump --no-owner --no-privileges, вырезать строку
 `SET transaction_timeout` (её нет в PostgreSQL 16), psql --single-transaction -v ON_ERROR_STOP=1.
+
+Восстановление из копии (проверено 2026-10-10 во временную базу):
+    sudo -u postgres createdb -O dictionary -T template0 -E UTF8 -l ru_RU.UTF-8 ИМЯ_БАЗЫ
+    sudo -u dictionary pg_restore --no-owner --exit-on-error -d ИМЯ_БАЗЫ ФАЙЛ.dump
+Перед восстановлением в рабочую базу остановить таймер: sudo systemctl stop dictionary-sync.timer
 
 ## Принятые решения (не пересматривать без причины)
 1. По умолчанию APP_ENV=prod: забытая настройка не ослабляет защиту.
@@ -108,6 +116,7 @@
 17. Резервная копия: pg_dump -Fc от пользователя dictionary, запись в .part и затем mv
     (оборванная копия не выглядит готовой), umask 077, хранится 14 дней.
     Синонимы менеджеров и заявки есть только в базе — их не восстановить из 1С.
+    Копия считается рабочей только после пробного восстановления.
 
 ## Этапы
 
@@ -147,7 +156,7 @@
 - [x] Проверено на сервере 2026-10-10: distr 5027 (+2/−2), customers 2022 (+18/−2),
       повторный запуск — пусто, таймер каждые 5 минут без ошибок
 
-### 6. Развёртывание — обмены работают, резервные копии в работе
+### 6. Развёртывание — обмены и резервные копии работают
 - [x] ВМ dictionary: Ubuntu 24.04.5, диск 57 ГБ, Europe/Moscow, ufw, qemu-guest-agent
 - [x] NTP: timedatectl — synchronized: yes
 - [x] PostgreSQL 16.15, база dictionary (ru_RU.UTF-8, peer), данные с ноутбука
@@ -156,8 +165,9 @@
 - [x] /etc/smb-rossvik.cred, /etc/fstab: cifs ro, x-systemd.automount; запись запрещена (проверено)
 - [x] Ручной запуск tools.sync_sources на сервере
 - [x] dictionary-sync.timer включён, запуски каждые 5 минут без ошибок
-- [x] scripts/backup_db.sh, deploy/dictionary-backup.service + .timer (код)
-- [ ] dictionary-backup.timer: установить на сервере, проверить копию (pg_restore -l → 6 TABLE DATA)
+- [x] scripts/backup_db.sh, deploy/dictionary-backup.service + .timer
+- [x] dictionary-backup.timer включён; копия 1.8M, pg_restore -l → 6 TABLE DATA,
+      пробное восстановление во временную базу — данные совпали
 - [ ] Копии вне ВМ (место не выбрано: хост KVM / Yandex Object Storage / 192.168.0.251)
 - [ ] Служебная учётка домена от ИТ (только чтение ftp1\distrib, ftp\CROSS) вместо личной
 - [ ] Сервис веба, Nginx, HTTPS — ТОЛЬКО после этапа 4
@@ -186,6 +196,7 @@
   код с GitHub, .env, сетевые папки 1С (домен ALCAR, пока личная учётка), база перенесена
   с ноутбука (18.6 → 16.15) и сверена.
 - 2026-10-10 (5): на сервере включён dictionary-sync.timer, обмены проверены (этап 5 готов).
-  Добавлены scripts/backup_db.sh и dictionary-backup.{service,timer}; price_users.csv
-  исправлен на price_user.csv. Следующий шаг — включить dictionary-backup.timer на сервере,
-  выбрать место для копий вне ВМ, затем этап 3 (результат подбора) и этап 4 (веб).
+  Добавлены и включены резервные копии (scripts/backup_db.sh, dictionary-backup.timer),
+  восстановление проверено. price_users.csv исправлен на price_user.csv.
+  Следующий шаг — выбрать место для копий вне ВМ, затем этап 3 (результат подбора)
+  и этап 4 (веб).
