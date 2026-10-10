@@ -1,5 +1,5 @@
 [Unit]
-Description=dictionary-app: импорт выгрузок 1С (distr.xlsx, price_users.csv)
+Description=dictionary-app: импорт выгрузок 1С (distr.xlsx, price_user.csv)
 After=network-online.target postgresql.service
 Wants=network-online.target
 

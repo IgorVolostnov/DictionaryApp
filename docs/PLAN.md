@@ -4,8 +4,11 @@
 Начало сессии с ассистентом: `cat docs/PLAN.md`; весь код — `scripts/dump_code.sh`
 (→ output/code_dump.txt). Конец сессии: обновить отметки и журнал, закоммитить с кодом.
 
-ВНИМАНИЕ АССИСТЕНТУ: веба ещё НЕТ (этап 4 не начат). Не предлагать службу веба, Nginx,
-HTTPS, пока этап 4 не отмечен. На сервере работает только импорт по таймеру.
+ВНИМАНИЕ АССИСТЕНТУ:
+- Веба ещё НЕТ (этап 4 не начат). Не предлагать службу веба, Nginx, HTTPS, пока этап 4
+  не отмечен. На сервере работают только таймеры обменов и резервных копий.
+- PLAN.md присылать ТОЛЬКО целиком, готовым файлом. Правки кусками не предлагать.
+- Код на сервере руками не правится: изменения делаются на ноутбуке → GitHub → git pull.
 
 ## Назначение
 Подбор товаров по заявкам клиентов. Менеджер вставляет текст письма или таблицу из Excel.
@@ -23,7 +26,8 @@ HTTPS, пока этап 4 не отмечен. На сервере работа
 - Проверки (pre-commit): ruff, mypy --strict, pytest, покрытие app/ — 100 %.
   Тесты с БД — TEST_DATABASE_URL, имя базы оканчивается на _test.
 - Слои: app/domain — логика без БД; app/sources — чтение файлов; app/db — работа с БД
-  (транзакцией управляет вызывающий код); tools/ — команды, в покрытие не входят.
+  (транзакцией управляет вызывающий код); tools/ — команды, в покрытие не входят;
+  scripts/ — shell-скрипты (dump_code.sh, backup_db.sh); deploy/ — unit-файлы systemd.
 
 ## Источники данных
 | Данные                 | Откуда                                     | Как попадает             | Таблица                  |
@@ -37,11 +41,12 @@ HTTPS, пока этап 4 не отмечен. На сервере работа
 | Журнал загрузок        | —                                          | —                        | source_import            |
 
 1С обновляет distr.xlsx и price_user.csv примерно раз в час, время плавает.
+Функция чтения покупателей называется read_price_users — это имя функции, не файла.
 
 ## Окружение
 - Разработка: ноутбук, ~/PycharmProjects/dictionary-app, PostgreSQL 18.6,
-  базы dictionary и dictionary_test (ru_RU.UTF-8). Копии выгрузок в input/
-  (distr.xlsx, price_user.csv, ОбщаяНоменклатура.xlsx, Номенклатура.xlsx).
+  базы dictionary и dictionary_test (ru_RU.UTF-8). Вход в psql: sudo -u postgres psql.
+  Копии выгрузок в input/ (distr.xlsx, price_user.csv, ОбщаяНоменклатура.xlsx, Номенклатура.xlsx).
 - Код: GitHub IgorVolostnov/DictionaryApp (закрытый), ветка master.
 - Сервер: ВМ dictionary, 192.168.100.20 (KVM, Cockpit), в одной ЛВС с 192.168.0.251.
   - Ubuntu 24.04.5 LTS (на 26.04 не обновлять), Python 3.12.3, uv 0.13.0 (/usr/local/bin),
@@ -53,10 +58,15 @@ HTTPS, пока этап 4 не отмечен. На сервере работа
     .env (600): DATABASE_URL=postgresql+psycopg://dictionary@/dictionary?host=/var/run/postgresql,
     DISTR_PATH, CUSTOMERS_PATH, SNAPSHOT_DIR=/var/lib/dictionary-app/snapshots.
   - Сетевые папки ТОЛЬКО НА ЧТЕНИЕ: /mnt/rossvik/ftp1, /mnt/rossvik/ftp
-    (/etc/fstab: cifs ro, vers=3.0, uid=dictionary, x-systemd.automount, nofail).
+    (/etc/fstab: cifs ro, vers=3.0, iocharset=utf8, uid=dictionary, x-systemd.automount, nofail).
     Учётка домена ALCAR в /etc/smb-rossvik.cred (root, 600). Сейчас ЛИЧНАЯ
-    (ALCAR\волостновис): после смены пароля Windows сразу обновить файл.
-  - Таймер: /etc/systemd/system/dictionary-sync.{service,timer} (копии из deploy/).
+    (ALCAR\волостновис): после смены пароля Windows сразу обновить файл
+    (read -rsp … P; printf … | sudo tee …; проверка smbclient -A).
+  - Таймеры (копии из deploy/ в /etc/systemd/system):
+    dictionary-sync — обмены с 1С каждые 5 минут;
+    dictionary-backup — pg_dump -Fc в /var/lib/dictionary-app/backups в 01:30, хранится 14 дней.
+    Загрузки: journalctl -u dictionary-sync -g 'загружен|отклонён|недоступен' --since today
+    Копии:    journalctl -u dictionary-backup -n 5
 
 ## Обновление сервера (после git push с ноутбука)
     cd /opt/dictionary-app
@@ -95,6 +105,9 @@ HTTPS, пока этап 4 не отмечен. На сервере работа
     dictionary мог бы изменить службу и получить root.
 16. Пароль домена в /etc/smb-rossvik.cred сначала проверяется `smbclient -A`, потом fstab:
     неверный пароль + таймер каждые 5 минут = блокировка учётки в домене.
+17. Резервная копия: pg_dump -Fc от пользователя dictionary, запись в .part и затем mv
+    (оборванная копия не выглядит готовой), umask 077, хранится 14 дней.
+    Синонимы менеджеров и заявки есть только в базе — их не восстановить из 1С.
 
 ## Этапы
 
@@ -125,37 +138,40 @@ HTTPS, пока этап 4 не отмечен. На сервере работа
 - [ ] Предупреждение: данным больше STALE_AFTER_MINUTES (по решению 14)
 - [ ] Выгрузка в 1С (формат уточнить)
 
-### 5. Обмены с 1С — код готов
+### 5. Обмены с 1С — готово
 - [x] SourceSettings: DISTR_PATH, CUSTOMERS_PATH, SNAPSHOT_DIR, QUIET_SECONDS, MAX_DROP_PERCENT
 - [x] app/sources/snapshot.py: копия «остывшего» файла + sha256
 - [x] Миграция 0005: source_import.sha256, source_mtime
 - [x] app/db/sync.py: пропуск неизменившихся, защита от снятия, блокировка
 - [x] tools/sync_sources.py (--force), deploy/dictionary-sync.service + .timer
-- [ ] Проверить на сервере (этап 6, шаг «таймер»)
+- [x] Проверено на сервере 2026-10-10: distr 5027 (+2/−2), customers 2022 (+18/−2),
+      повторный запуск — пусто, таймер каждые 5 минут без ошибок
 
-### 6. Развёртывание — сервер готов, таймер не включён
+### 6. Развёртывание — обмены работают, резервные копии в работе
 - [x] ВМ dictionary: Ubuntu 24.04.5, диск 57 ГБ, Europe/Moscow, ufw, qemu-guest-agent
 - [x] NTP: timedatectl — synchronized: yes
 - [x] PostgreSQL 16.15, база dictionary (ru_RU.UTF-8, peer), данные с ноутбука
       перенесены дампом и сверены (alias 26299, customer 2006, product 5028), alembic 0005
 - [x] Пользователь dictionary, deploy key, /opt/dictionary-app, uv sync --frozen --no-dev, .env
 - [x] /etc/smb-rossvik.cred, /etc/fstab: cifs ro, x-systemd.automount; запись запрещена (проверено)
-- [ ] Ручной запуск tools.sync_sources на сервере
-- [ ] Включить dictionary-sync.timer, проверить journalctl -u dictionary-sync
+- [x] Ручной запуск tools.sync_sources на сервере
+- [x] dictionary-sync.timer включён, запуски каждые 5 минут без ошибок
+- [x] scripts/backup_db.sh, deploy/dictionary-backup.service + .timer (код)
+- [ ] dictionary-backup.timer: установить на сервере, проверить копию (pg_restore -l → 6 TABLE DATA)
+- [ ] Копии вне ВМ (место не выбрано: хост KVM / Yandex Object Storage / 192.168.0.251)
 - [ ] Служебная учётка домена от ИТ (только чтение ftp1\distrib, ftp\CROSS) вместо личной
-- [ ] Резервное копирование PostgreSQL (pg_dump по таймеру, хранить вне ВМ)
 - [ ] Сервис веба, Nginx, HTTPS — ТОЛЬКО после этапа 4
 
 ### Мелкие правки
 - [x] pricing.py: комментарий «Цена» → «Цена Дистрибьюторская»
 - [x] Имя файла покупателей: price_user.csv — и на сервере, и в коде
-- [ ] Убрать «price_users.csv» из Description в deploy/dictionary-sync.service,
-      docstring app/db/sync.py, tests/db/test_sync.py (make_settings)
+- [x] «price_users.csv» убран из deploy/dictionary-sync.service, app/db/sync.py, tests/db/test_sync.py
 - [ ] tools/load_distr, load_customers: ловить ImportRejectedError, как load_aliases
 
 ## Открытые вопросы
 - Формат выгрузки заказа в 1С.
 - Когда ИТ выдаст служебную учётку домена ALCAR.
+- Где хранить резервные копии вне ВМ; есть ли доступ к хосту KVM.
 
 ## Журнал сессий
 - 2026-10-05 (1): заведён PLAN.md. Сервер в ЛВС с 192.168.0.251.
@@ -168,5 +184,8 @@ HTTPS, пока этап 4 не отмечен. На сервере работа
   Следующий шаг — этап 6: сбор сведений о сервере.
 - 2026-10-10 (4): развёрнута ВМ dictionary (192.168.100.20): система, PostgreSQL 16,
   код с GitHub, .env, сетевые папки 1С (домен ALCAR, пока личная учётка), база перенесена
-  с ноутбука (18.6 → 16.15) и сверена. Следующий шаг — ручной запуск sync_sources
-  и включение таймера, затем резервные копии; потом этап 3 (результат подбора) и 4 (веб).
+  с ноутбука (18.6 → 16.15) и сверена.
+- 2026-10-10 (5): на сервере включён dictionary-sync.timer, обмены проверены (этап 5 готов).
+  Добавлены scripts/backup_db.sh и dictionary-backup.{service,timer}; price_users.csv
+  исправлен на price_user.csv. Следующий шаг — включить dictionary-backup.timer на сервере,
+  выбрать место для копий вне ВМ, затем этап 3 (результат подбора) и этап 4 (веб).

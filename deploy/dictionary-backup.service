@@ -1,0 +1,11 @@
+[Unit]
+Description=dictionary-app: резервная копия базы
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=dictionary
+Group=dictionary
+ExecStart=/opt/dictionary-app/scripts/backup_db.sh
+Nice=10

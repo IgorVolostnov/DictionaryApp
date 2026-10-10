@@ -28,7 +28,7 @@ def make_settings(tmp_path: Path) -> SourceSettings:
     values: dict[str, Any] = {
         "database_url": "postgresql+psycopg://unused@localhost/unused",
         "distr_path": tmp_path / "distr.xlsx",
-        "customers_path": tmp_path / "price_users.csv",
+        "customers_path": tmp_path / "price_user.csv",
         "snapshot_dir": tmp_path / "snapshots",
     }
     return SourceSettings(_env_file=None, **values)
