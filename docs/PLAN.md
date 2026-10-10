@@ -4,6 +4,9 @@
 Начало сессии с ассистентом: `cat docs/PLAN.md`; весь код — `scripts/dump_code.sh`
 (→ output/code_dump.txt). Конец сессии: обновить отметки и журнал, закоммитить с кодом.
 
+ВНИМАНИЕ АССИСТЕНТУ: веба ещё НЕТ (этап 4 не начат). Не предлагать службу веба, Nginx,
+HTTPS, пока этап 4 не отмечен. На сервере работает только импорт по таймеру.
+
 ## Назначение
 Подбор товаров по заявкам клиентов. Менеджер вставляет текст письма или таблицу из Excel.
 Приложение находит товары (словарь синонимов из Access, артикулы, наименования),
@@ -12,7 +15,8 @@
 
 ## Стек и правила кода
 - Python 3.12, uv. Веб: FastAPI + Jinja2, gunicorn/uvicorn (веб ещё не начат).
-- PostgreSQL, SQLAlchemy 2 async + psycopg 3, миграции Alembic (migrations/versions, 0001…).
+- PostgreSQL (разработка 18, сервер 16), SQLAlchemy 2 async + psycopg 3,
+  миграции Alembic (migrations/versions, 0001…).
 - Окружение читает только app/config.py: DatabaseSettings (только БД), SourceSettings
   (выгрузки 1С), Settings (веб: вход, OCR).
 - Вход: OIDC через Authentik (authlib). AUTH_MODE=dev только при APP_ENV=dev.
@@ -25,21 +29,45 @@
 | Данные                 | Откуда                                     | Как попадает             | Таблица                  |
 |------------------------|--------------------------------------------|--------------------------|--------------------------|
 | Каталог                | \\192.168.0.251\ftp1\distrib\distr.xlsx    | таймер, ~раз в час       | product                  |
-| Покупатели             | \\192.168.0.251\ftp\CROSS\price_users.csv  | таймер, ~раз в час       | customer (замена целиком)|
+| Покупатели             | \\192.168.0.251\ftp\CROSS\price_user.csv   | таймер, ~раз в час       | customer (замена целиком)|
 | Справочник цен. групп  | ЦеновыеГруппы.xlsx                         | tools/load_prices → админка | price_document (groups)|
 | Виды цен               | текст из 1С                                | tools/load_prices → админка | price_document (types) |
 | Группа товара          | Номенклатура.xlsx (пока нет в distr)       | tools/load_groups        | product.price_group      |
 | Синонимы               | ОбщаяНоменклатура.xlsx (Access) + менеджеры| tools/load_aliases, админка | alias (access/manager) |
 | Журнал загрузок        | —                                          | —                        | source_import            |
 
-1С обновляет distr.xlsx и price_users.csv примерно раз в час, время плавает.
+1С обновляет distr.xlsx и price_user.csv примерно раз в час, время плавает.
 
 ## Окружение
-- Разработка: ~/PycharmProjects/dictionary-app, копии выгрузок в input/
+- Разработка: ноутбук, ~/PycharmProjects/dictionary-app, PostgreSQL 18.6,
+  базы dictionary и dictionary_test (ru_RU.UTF-8). Копии выгрузок в input/
   (distr.xlsx, price_user.csv, ОбщаяНоменклатура.xlsx, Номенклатура.xlsx).
-- Сервер: в одной ЛВС с 192.168.0.251. Пользователь dictionary, /opt/dictionary-app.
-  Сетевые папки ТОЛЬКО НА ЧТЕНИЕ: /mnt/rossvik/ftp1, /mnt/rossvik/ftp (cifs + automount).
-  Снимки выгрузок: /var/lib/dictionary-app/snapshots (StateDirectory в systemd).
+- Код: GitHub IgorVolostnov/DictionaryApp (закрытый), ветка master.
+- Сервер: ВМ dictionary, 192.168.100.20 (KVM, Cockpit), в одной ЛВС с 192.168.0.251.
+  - Ubuntu 24.04.5 LTS (на 26.04 не обновлять), Python 3.12.3, uv 0.13.0 (/usr/local/bin),
+    PostgreSQL 16.15, Europe/Moscow, NTP синхронизирован, ufw: открыт только SSH.
+  - Вход: с офисного ПК `ssh dictionary` (ключ, ~/.ssh/config), администратор visfin (sudo).
+  - Пользователь dictionary (системный): код /opt/dictionary-app, deploy key GitHub
+    только на чтение (/home/dictionary/.ssh/id_ed25519).
+  - База dictionary: владелец dictionary, ru_RU.UTF-8, вход peer через сокет, без пароля.
+    .env (600): DATABASE_URL=postgresql+psycopg://dictionary@/dictionary?host=/var/run/postgresql,
+    DISTR_PATH, CUSTOMERS_PATH, SNAPSHOT_DIR=/var/lib/dictionary-app/snapshots.
+  - Сетевые папки ТОЛЬКО НА ЧТЕНИЕ: /mnt/rossvik/ftp1, /mnt/rossvik/ftp
+    (/etc/fstab: cifs ro, vers=3.0, uid=dictionary, x-systemd.automount, nofail).
+    Учётка домена ALCAR в /etc/smb-rossvik.cred (root, 600). Сейчас ЛИЧНАЯ
+    (ALCAR\волостновис): после смены пароля Windows сразу обновить файл.
+  - Таймер: /etc/systemd/system/dictionary-sync.{service,timer} (копии из deploy/).
+
+## Обновление сервера (после git push с ноутбука)
+    cd /opt/dictionary-app
+    sudo -u dictionary git pull --ff-only
+    sudo -u dictionary uv sync --frozen --no-dev
+    sudo -u dictionary .venv/bin/alembic upgrade head      # перед этим — резервная копия
+    sudo install -m 644 -o root -g root deploy/*.service deploy/*.timer /etc/systemd/system/
+    sudo systemctl daemon-reload
+
+Перенос базы ноутбук → сервер: pg_dump --no-owner --no-privileges, вырезать строку
+`SET transaction_timeout` (её нет в PostgreSQL 16), psql --single-transaction -v ON_ERROR_STOP=1.
 
 ## Принятые решения (не пересматривать без причины)
 1. По умолчанию APP_ENV=prod: забытая настройка не ослабляет защиту.
@@ -62,6 +90,11 @@
 13. Один источник грузит один процесс: pg_try_advisory_xact_lock(hashtext(lock_name)).
     Ручная загрузка из админки обязана брать ту же блокировку.
 14. Свежесть данных = время файла 1С: max(source_import.source_mtime) по источнику.
+15. На сервере код руками не правится: только git pull. Unit-файлы копируются
+    в /etc/systemd/system (владелец root), а не ссылками на /opt: иначе пользователь
+    dictionary мог бы изменить службу и получить root.
+16. Пароль домена в /etc/smb-rossvik.cred сначала проверяется `smbclient -A`, потом fstab:
+    неверный пароль + таймер каждые 5 минут = блокировка учётки в домене.
 
 ## Этапы
 
@@ -98,24 +131,31 @@
 - [x] Миграция 0005: source_import.sha256, source_mtime
 - [x] app/db/sync.py: пропуск неизменившихся, защита от снятия, блокировка
 - [x] tools/sync_sources.py (--force), deploy/dictionary-sync.service + .timer
-- [ ] Проверить на сервере (этап 6)
+- [ ] Проверить на сервере (этап 6, шаг «таймер»)
 
-### 6. Развёртывание
-- [ ] Пользователь dictionary, /opt/dictionary-app, uv sync --no-dev, .env, alembic upgrade head
-- [ ] NTP на сервере (timedatectl): проверка «файл остыл» сравнивает часы двух серверов
-- [ ] /etc/smb-rossvik.cred, /etc/fstab: cifs ro, x-systemd.automount
+### 6. Развёртывание — сервер готов, таймер не включён
+- [x] ВМ dictionary: Ubuntu 24.04.5, диск 57 ГБ, Europe/Moscow, ufw, qemu-guest-agent
+- [x] NTP: timedatectl — synchronized: yes
+- [x] PostgreSQL 16.15, база dictionary (ru_RU.UTF-8, peer), данные с ноутбука
+      перенесены дампом и сверены (alias 26299, customer 2006, product 5028), alembic 0005
+- [x] Пользователь dictionary, deploy key, /opt/dictionary-app, uv sync --frozen --no-dev, .env
+- [x] /etc/smb-rossvik.cred, /etc/fstab: cifs ro, x-systemd.automount; запись запрещена (проверено)
+- [ ] Ручной запуск tools.sync_sources на сервере
 - [ ] Включить dictionary-sync.timer, проверить journalctl -u dictionary-sync
-- [ ] Сервис веба, Nginx, HTTPS
-- [ ] Резервное копирование PostgreSQL
+- [ ] Служебная учётка домена от ИТ (только чтение ftp1\distrib, ftp\CROSS) вместо личной
+- [ ] Резервное копирование PostgreSQL (pg_dump по таймеру, хранить вне ВМ)
+- [ ] Сервис веба, Nginx, HTTPS — ТОЛЬКО после этапа 4
 
 ### Мелкие правки
 - [x] pricing.py: комментарий «Цена» → «Цена Дистрибьюторская»
-- [ ] Имя файла покупателей: price_user.csv (код, input/) или price_users.csv (сервер)?
+- [x] Имя файла покупателей: price_user.csv — и на сервере, и в коде
+- [ ] Убрать «price_users.csv» из Description в deploy/dictionary-sync.service,
+      docstring app/db/sync.py, tests/db/test_sync.py (make_settings)
 - [ ] tools/load_distr, load_customers: ловить ImportRejectedError, как load_aliases
 
 ## Открытые вопросы
-- Точное имя csv покупателей на сервере.
 - Формат выгрузки заказа в 1С.
+- Когда ИТ выдаст служебную учётку домена ALCAR.
 
 ## Журнал сессий
 - 2026-10-05 (1): заведён PLAN.md. Сервер в ЛВС с 192.168.0.251.
@@ -126,3 +166,7 @@
 - 2026-10-05 (3): этап 5 проверен локально: 240 тестов, покрытие 100 %, миграция 0005.
   sync_sources: distr 5027 товаров, customers 2006; повторный запуск ничего не грузит.
   Следующий шаг — этап 6: сбор сведений о сервере.
+- 2026-10-10 (4): развёрнута ВМ dictionary (192.168.100.20): система, PostgreSQL 16,
+  код с GitHub, .env, сетевые папки 1С (домен ALCAR, пока личная учётка), база перенесена
+  с ноутбука (18.6 → 16.15) и сверена. Следующий шаг — ручной запуск sync_sources
+  и включение таймера, затем резервные копии; потом этап 3 (результат подбора) и 4 (веб).
