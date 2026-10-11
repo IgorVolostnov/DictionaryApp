@@ -40,6 +40,7 @@ class CatalogItem:
     name: str
     sort_order: int | None
     active: bool
+    price_group: str = ""
 
 
 @dataclass(frozen=True, slots=True)

@@ -134,7 +134,7 @@
 ### 3. Предметная логика
 - [x] normalize (эталон Excel), parse_input, search + order_match, reserve, pricing, credit
 - [x] tools/find_lines: разбор заявки и поиск из консоли
-- [ ] Собрать результат подбора: цена + резерв + кредит по строкам (сейчас отдельные функции)
+- [x] Собрать результат подбора: app/domain/order_result.py (compute_order_result)
 - [ ] OCR Yandex Vision (есть только настройки)
 
 ### 4. Веб — не начат
@@ -156,7 +156,15 @@
 - [x] Проверено на сервере 2026-10-10: distr 5027 (+2/−2), customers 2022 (+18/−2),
       повторный запуск — пусто, таймер каждые 5 минут без ошибок
 
-### 6. Развёртывание — обмены и резервные копии работают
+### 7. Результат подбора — готово
+- [x] app/domain/order_result.py: RowResult + OrderResult, compute_order_result()
+- [x] CatalogItem добавлен price_group
+- [x] load_search_index загружает price_group из БД
+- [x] tests/unit/test_order_result.py: 32 теста, 100% покрытие
+- [x] tests/db/test_search.py обновлён под новый CatalogItem
+- [x] pre-commit: ruff, mypy --strict, pytest — все прошли
+
+### 8. Развёртывание — обмены и резервные копии работают
 - [x] ВМ dictionary: Ubuntu 24.04.5, диск 57 ГБ, Europe/Moscow, ufw, qemu-guest-agent
 - [x] NTP: timedatectl — synchronized: yes
 - [x] PostgreSQL 16.15, база dictionary (ru_RU.UTF-8, peer), данные с ноутбука
@@ -200,3 +208,9 @@
   восстановление проверено. price_users.csv исправлен на price_user.csv.
   Следующий шаг — выбрать место для копий вне ВМ, затем этап 3 (результат подбора)
   и этап 4 (веб).
+- 2026-10-11 (6): Этап 7 — создан app/domain/order_result.py с compute_order_result(),
+  объединяющей цену, резерв и кредит. CatalogItem добавлен price_group,
+  load_search_index загружает price_group. 32 unit-теста, 100% покрытие.
+  pre-commit: ruff, mypy --strict, pytest — все прошли. 272 теста, 0 failed.
+  Следующий шаг — Этап 8: offsite backup через rclone + YC Object Storage
+  и docs/RECOVERY.md.

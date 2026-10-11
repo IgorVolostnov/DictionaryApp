@@ -1,0 +1,13 @@
+[Unit]
+Description=Offsite backup: rclone sync to Yandex Cloud Storage
+After=dictionary-backup.service
+Requires=dictionary-backup.service
+
+[Service]
+Type=oneshot
+User=dictionary
+Environment=RCLONE_REMOTE=yc-dictionary
+ExecStart=/opt/dictionary-app/scripts/backup_rclone.sh
+
+[Install]
+WantedBy=multi-user.target
